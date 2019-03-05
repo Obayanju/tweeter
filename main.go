@@ -30,7 +30,7 @@ func (f *Feed) Get(count int, reply *[]string) error {
 }
 
 func main() {
-	server()
+	client()
 }
 
 func server() {
@@ -49,7 +49,29 @@ func server() {
 	}
 }
 
-
+func client() {
+	client, err := rpc.DialHTTP("tcp", "localhost"  + ":8080")
+	if err != nil {
+		log.Fatalf("rpc.DialHTTP: %v", err)
+	}
+	var junk Nothing
+	if err = client.Call("Feed.Post", "Hi there", &junk); err != nil {
+		log.Fatalf("client.Post: %v", err)
+	}
+	if err = client.Call("Feed.Post", "RPC is so fun", &junk); err != nil {
+		log.Fatalf("client.Post: %v", err)
+	}
+	var replyList []string
+	if err = client.Call("Feed.Get", 4, &replyList); err != nil {
+		log.Fatalf("client.Get: %v", err)
+	}
+	for _, elt := range replyList {
+		log.Println(elt)
+	}
+	if err := client.Close(); err != nil {
+		log.Fatalf("client.Close: %v", err)
+	}
+}
 
 
 
