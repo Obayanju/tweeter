@@ -1,12 +1,16 @@
 package main
 
 import (
+	"fmt"
+	"strconv"
+	"bufio"
 	"log"
 	"net"
 	"net/http"
 	"net/rpc"
 	"flag"
 	"os"
+	"strings"
 )
 
 const (
@@ -67,7 +71,7 @@ func main() {
 	}
 
 	if isClient {
-		client(address)
+		shell(address)
 	} else {
 		server(address)
 	}
@@ -126,4 +130,58 @@ func call(address string, method string, request interface{}, response interface
 	}
 
 	return nil
+}
+
+func shell(address string) {
+	log.Printf("Starting interactive shell")
+	log.Printf("Commands are: get, post")
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		line := scanner.Text()
+		line = strings.TrimSpace(line)
+
+		parts := strings.SplitN(line, " ", 2)
+		if len(parts) > 1 {
+			parts[1] = strings.TrimSpace(parts[1])
+		}
+		if len(parts) == 0 {
+			continue
+		}
+
+		switch parts[0] {
+			case "get":
+				n := 10
+				if len(parts) == 2 {
+					var err error
+					if n, err = strconv.Atoi(parts[1]); err != nil {
+						log.Fatalf("parsing number of messages: %v", err)
+					}
+				}
+
+				var messages []string
+				if err := call(address, "Feed.Get", n, &messages); err != nil {
+					log.Fatalf("Calling Feed.Get: %v", err)
+				}
+				for _, message := range messages {
+					fmt.Println(message)
+				}
+
+			case "post":
+				if len(parts) != 2 {
+					log.Printf("you must specify a message to post")
+					continue
+				}
+
+				var junk Nothing
+				if err := call(address, "Feed.Post", parts[1], &junk); err != nil {
+					log.Fatalf("Calling Feed.Post: %v", err)
+				}
+			default:
+				log.Printf("I only recognize \"get\" and \"post\"")
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Fatalf("scanner error: %v", err)
+	}
 }
