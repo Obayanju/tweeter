@@ -96,25 +96,34 @@ func server(address string) {
 }
 
 func client(address string) {
-	client, err := rpc.DialHTTP("tcp", address)
-	if err != nil {
-		log.Fatalf("rpc.DialHTTP: %v", err)
-	}
 	var junk Nothing
-	if err = client.Call("Feed.Post", "Hi there", &junk); err != nil {
+	if err := call(address, "Feed.Post", "Hi there", &junk); err != nil {
 		log.Fatalf("client.Post: %v", err)
 	}
-	if err = client.Call("Feed.Post", "RPC is so fun", &junk); err != nil {
+	if err := call(address, "Feed.Post", "RPC is so fun", &junk); err != nil {
 		log.Fatalf("client.Post: %v", err)
 	}
 	var replyList []string
-	if err = client.Call("Feed.Get", 4, &replyList); err != nil {
+	if err := call(address, "Feed.Get", 4, &replyList); err != nil {
 		log.Fatalf("client.Get: %v", err)
 	}
 	for _, elt := range replyList {
 		log.Println(elt)
 	}
-	if err := client.Close(); err != nil {
-		log.Fatalf("client.Close: %v", err)
+}
+
+func call(address string, method string, request interface{}, response interface{}) error {
+	client, err := rpc.DialHTTP("tcp", address)
+	if err != nil {
+		log.Printf("rpc.DialHTTP: %v", err)
+		return err
 	}
+	defer client.Close()
+
+	if err = client.Call(method, request, response); err != nil {
+		log.Printf("client.Call %s: %v", method, err)
+		return err
+	}
+
+	return nil
 }
