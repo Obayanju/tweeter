@@ -1,6 +1,11 @@
 package main
 
-import "log"
+import (
+	"log"
+	"net"
+	"net/http"
+	"net/rpc"
+)
 
 // server object to be exported over RPC
 type Feed struct {
@@ -25,22 +30,31 @@ func (f *Feed) Get(count int, reply *[]string) error {
 }
 
 func main() {
-	state := new(Feed)
+	server()
+}
 
-	var junk Nothing
-	if err := state.Post("Hello world!", &junk); err != nil {
-		log.Fatalf("Post: %v", err)
+func server() {
+	// create instance of object to be exported 
+	feed := new(Feed)
+	// register with RPC library
+	rpc.Register(feed)
+	// handle http request once server is up and running
+	rpc.HandleHTTP()
+	l, e := net.Listen("tcp", ":8080")
+	if e != nil {
+		log.Fatal("listen error:", e)
 	}
-	if err := state.Post("Today is Monday", &junk); err != nil {
-		log.Fatalf("Post: %v", err)
-	}
-
-	var lst []string
-	if err := state.Get(5, &lst); err != nil {
-		log.Fatalf("Get: %v", err)
-	}
-
-	for _, elt := range lst {
-		log.Println(elt)
+	if err := http.Serve(l, nil); err != nil {
+		log.Fatalf("http.Serve: %v", err)
 	}
 }
+
+
+
+
+
+
+
+
+
+
