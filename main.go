@@ -5,6 +5,13 @@ import (
 	"net"
 	"net/http"
 	"net/rpc"
+	"flag"
+	"os"
+)
+
+const (
+	defaultHost = "localhost"
+	defaultPort = "3410"
 )
 
 // server object to be exported over RPC
@@ -30,17 +37,56 @@ func (f *Feed) Get(count int, reply *[]string) error {
 }
 
 func main() {
-	client()
+	var address string
+	var isClient bool
+	var isServer bool
+	flag.BoolVar(&isClient, "client", false, "starts as tweeter client")
+	flag.BoolVar(&isServer, "server", false, "starts as tweeter server")
+	flag.Parse()
+
+	if isServer && isClient {
+		printUsage()
+	}
+	if !isServer && !isClient {
+		printUsage()
+	}
+
+	switch flag.NArg() {
+	case 0:
+		if isClient {
+			address = defaultHost + ":" + defaultPort
+		} else {
+			address = ":" + defaultPort
+		}
+
+	case 1:
+		address = flag.Arg(0)
+
+	default:
+		printUsage()
+	}
+
+	if isClient {
+		client(address)
+	} else {
+		server(address)
+	}
 }
 
-func server() {
+func printUsage() {
+	log.Printf("Usage: %s [-server or -client] [address]", os.Args[0])
+	flag.PrintDefaults()
+	os.Exit(1)
+}
+
+func server(address string) {
 	// create instance of object to be exported 
 	feed := new(Feed)
 	// register with RPC library
 	rpc.Register(feed)
 	// handle http request once server is up and running
 	rpc.HandleHTTP()
-	l, e := net.Listen("tcp", ":8080")
+	l, e := net.Listen("tcp", address)
 	if e != nil {
 		log.Fatal("listen error:", e)
 	}
@@ -49,8 +95,8 @@ func server() {
 	}
 }
 
-func client() {
-	client, err := rpc.DialHTTP("tcp", "localhost"  + ":8080")
+func client(address string) {
+	client, err := rpc.DialHTTP("tcp", address)
 	if err != nil {
 		log.Fatalf("rpc.DialHTTP: %v", err)
 	}
@@ -72,11 +118,3 @@ func client() {
 		log.Fatalf("client.Close: %v", err)
 	}
 }
-
-
-
-
-
-
-
-
