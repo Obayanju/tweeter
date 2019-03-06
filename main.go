@@ -23,21 +23,50 @@ type Feed struct {
 	Messages []string
 }
 
+type handler func(*Feed)
+// write only channel
+type Server chan<- handler
+
 type Nothing struct{}
 
 // methods to be exported by RPC
-func (f *Feed) Post(msg string, reply *Nothing) error {
-	f.Messages = append(f.Messages, msg)
+func (s Server) Post(msg string, reply *Nothing) error {
+	finished := make(chan struct{})
+	s <- func(f *Feed) {
+		f.Messages = append(f.Messages, msg)
+		finished <- struct{}{}
+	}
+	<-finished
 	return nil
 }
 
-func (f *Feed) Get(count int, reply *[]string) error {
-	if len(f.Messages) < count {
-		count = len(f.Messages)
+func (s Server) Get(count int, reply *[]string) error {
+	finished := make(chan struct{})
+	s <- func(f *Feed) {
+		if len(f.Messages) < count {
+			count = len(f.Messages)
+		}
+		*reply = make([]string, count)
+		copy(*reply, f.Messages[len(f.Messages) - count:])
+		finished<- struct{}{}
 	}
-	*reply = make([]string, count)
-	copy(*reply, f.Messages[len(f.Messages) - count:])
+	<-finished
 	return nil
+}
+
+func startActor() Server {
+	ch := make(chan handler)
+	state := new(Feed)
+	go func() {
+		for f := range ch {
+			// give access to state
+			// for the duration of that call, no one else has access to the state
+			// therefore the state is temporarily private during the call
+			f(state)
+		}
+	}()
+
+	return ch
 }
 
 func main() {
@@ -85,9 +114,9 @@ func printUsage() {
 
 func server(address string) {
 	// create instance of object to be exported 
-	feed := new(Feed)
-	// register with RPC library
-	rpc.Register(feed)
+	actor := startActor()
+	// register the channel of handlers with RPC library
+	rpc.Register(actor)
 	// handle http request once server is up and running
 	rpc.HandleHTTP()
 	l, e := net.Listen("tcp", address)
@@ -101,14 +130,14 @@ func server(address string) {
 
 func client(address string) {
 	var junk Nothing
-	if err := call(address, "Feed.Post", "Hi there", &junk); err != nil {
+	if err := call(address, "Server.Post", "Hi there", &junk); err != nil {
 		log.Fatalf("client.Post: %v", err)
 	}
-	if err := call(address, "Feed.Post", "RPC is so fun", &junk); err != nil {
+	if err := call(address, "Server.Post", "RPC is so fun", &junk); err != nil {
 		log.Fatalf("client.Post: %v", err)
 	}
 	var replyList []string
-	if err := call(address, "Feed.Get", 4, &replyList); err != nil {
+	if err := call(address, "Server.Get", 4, &replyList); err != nil {
 		log.Fatalf("client.Get: %v", err)
 	}
 	for _, elt := range replyList {
@@ -159,7 +188,7 @@ func shell(address string) {
 				}
 
 				var messages []string
-				if err := call(address, "Feed.Get", n, &messages); err != nil {
+				if err := call(address, "Server.Get", n, &messages); err != nil {
 					log.Fatalf("Calling Feed.Get: %v", err)
 				}
 				for _, message := range messages {
@@ -173,7 +202,7 @@ func shell(address string) {
 				}
 
 				var junk Nothing
-				if err := call(address, "Feed.Post", parts[1], &junk); err != nil {
+				if err := call(address, "Server.Post", parts[1], &junk); err != nil {
 					log.Fatalf("Calling Feed.Post: %v", err)
 				}
 			default:
